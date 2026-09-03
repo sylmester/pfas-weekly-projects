@@ -1,14 +1,7 @@
 import os
 
-# Names of the subfolders to create inside each week folder
 SUBFOLDERS = ["Elias", "Irene", "Alberto", "Sylvester", "Weekly Project"]
-
-# Number of week folders
 NUM_WEEKS = 9
-
-# Base directory where the week folders will be created
-# Change this to wherever you want the weekN folders to live,
-# e.g. "." for the current directory, or an absolute path.
 BASE_DIR = "."
 
 for week_num in range(1, NUM_WEEKS + 1):
@@ -16,6 +9,9 @@ for week_num in range(1, NUM_WEEKS + 1):
     for sub in SUBFOLDERS:
         path = os.path.join(week_folder, sub)
         os.makedirs(path, exist_ok=True)
+        # add a placeholder so git tracks the empty folder
+        gitkeep_path = os.path.join(path, ".gitkeep")
+        open(gitkeep_path, "a").close()
         print(f"Created: {path}")
 
-print("\nDone! All week folders and subfolders are set up.")
+print("\nDone!")

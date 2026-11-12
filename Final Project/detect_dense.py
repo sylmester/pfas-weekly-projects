@@ -24,7 +24,7 @@ import numpy as np
 # ----------------------------------------------------------------------------
 # CONFIGURATION
 # ----------------------------------------------------------------------------
-DIR = "2_obstacle" #"3_curved_bend" #"1_no_obstacle"  # or 1_no_obstacle, 2_obstacle, 3_curved_bend
+DIR = "3_curved_bend" #"3_curved_bend" #"1_no_obstacle"  # or 1_no_obstacle, 2_obstacle, 3_curved_bend
 
 LEFT_GLOB = f"{DIR}/rectified_left/*.png"
 OUTPUT_DIR = f"{DIR}/detect_dense/"

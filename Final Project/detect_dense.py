@@ -24,7 +24,7 @@ import numpy as np
 # ----------------------------------------------------------------------------
 # CONFIGURATION
 # ----------------------------------------------------------------------------
-DIR = "3_curved_bend" #"2_obstacle" #"1_no_obstacle"  # or 1_no_obstacle, 2_obstacle, 3_curved_bend
+DIR = "2_obstacle" #"3_curved_bend" #"1_no_obstacle"  # or 1_no_obstacle, 2_obstacle, 3_curved_bend
 
 LEFT_GLOB = f"{DIR}/rectified_left/*.png"
 OUTPUT_DIR = f"{DIR}/detect_dense/"
@@ -40,6 +40,14 @@ CLOSE_KERNEL = 25      # joins the robot's parts into one blob
 # A blob only counts if the mean grey-level change between the two frames inside it is
 # above this. Measured on 2_obstacle: false blobs <= 1.3, real robot >= 4.1.
 MIN_INTENSITY_DIFF = 2.5
+
+# The robot drives on the floor, so it never touches the top of the image. Blobs that do
+# are the thin top-edge glitch strips (2_obstacle frames 3-4, 3_curved_bend frames 87-88).
+TOP_MARGIN_PX = 5
+
+# When there are several blobs, pick the one closest to the last detection instead of the
+# largest, as long as that detection is at most this many frames old. Otherwise: largest.
+MAX_FRAMES_SINCE_LAST = 10
 
 FARNEBACK_PARAMS = dict(
     pyr_scale=0.5, levels=3, winsize=15, iterations=3, poly_n=5, poly_sigma=1.2, flags=0
@@ -77,20 +85,33 @@ def intensity_change(contour, diff):
     return float(diff[blob > 0].mean())
 
 
-def detect(mask, diff):
-    """Bounding box (x, y, w, h) of the largest real moving blob, or None.
+def box_center(box):
+    x, y, w, h = box
+    return np.array([x + w / 2, y + h / 2])
+
+
+def detect(mask, diff, last_box=None):
+    """Bounding box (x, y, w, h) of the real moving blob, or None.
 
     diff: full-size absolute difference of the two grey frames, used to reject
     blobs where the flow says "moving" but the pixels did not actually change.
+    last_box: a recent detection. If given, the blob closest to it is chosen,
+    otherwise the largest blob.
     """
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = [
         c for c in contours
         if cv2.contourArea(c) >= MIN_AREA_PX and intensity_change(c, diff) >= MIN_INTENSITY_DIFF
     ]
-    if not contours:
+    boxes = [cv2.boundingRect(c) for c in contours]
+    areas = [cv2.contourArea(c) for c in contours]
+    candidates = [(b, a) for b, a in zip(boxes, areas) if b[1] > TOP_MARGIN_PX]
+    if not candidates:
         return None
-    return cv2.boundingRect(max(contours, key=cv2.contourArea))
+    if last_box is None:
+        return max(candidates, key=lambda ba: ba[1])[0]
+    last = box_center(last_box)
+    return min(candidates, key=lambda ba: np.linalg.norm(box_center(ba[0]) - last))[0]
 
 
 def draw(img, mask, box):
@@ -117,6 +138,7 @@ prev_img = cv2.imread(paths[0])
 prev_gray = prep(prev_img)
 prev_full = cv2.cvtColor(prev_img, cv2.COLOR_BGR2GRAY)
 boxes = []
+last_box, last_frame = None, None  # most recent detection, used to choose between blobs
 
 for i, path in enumerate(paths[1:], start=1):
     img = cv2.imread(path)
@@ -128,7 +150,10 @@ for i, path in enumerate(paths[1:], start=1):
 
     mask, mag = motion_mask(prev_gray, gray)
     mask = mask[: img.shape[0], : img.shape[1]]
-    box = detect(mask, cv2.absdiff(full, prev_full))
+    recent = last_box if last_frame is not None and i - last_frame <= MAX_FRAMES_SINCE_LAST else None
+    box = detect(mask, cv2.absdiff(full, prev_full), recent)
+    if box is not None:
+        last_box, last_frame = box, i
     boxes.append((i, *box) if box is not None else (i, -1, -1, -1, -1))
 
     name = os.path.basename(path)

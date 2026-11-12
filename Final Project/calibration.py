@@ -29,7 +29,7 @@ SQUARE_SIZE_MM = 80.0
 
 # When Calibrating the intrinsic camera model for each camera it warped dramatically at the edges
 # Keeping the k3 fixed at 0 removes the radial distortion that is strongest at the edges
-INTRINSIC_FLAGS = cv2.CALIB_FIX_K3
+INTRINSIC_FLAGS = cv2.CALIB_FIX_K3 | cv2.CALIB_ZERO_TANGENT_DIST
 
 # Image scales tried by the corner detector. See find_corners().
 SCALES = (1.0, 0.5, 0.25, 1.25, 1.5, 2.0, 2.5)
@@ -353,6 +353,9 @@ def main():
 
     section("1. Corner detection")
     views, image_size = detect_all()
+    for v in views:
+        if v["name"] == "024.png":
+            v["right"] = None
 
     section("2. Per-camera calibration (all boards found by that camera)")
     K, D, rejected = {}, {}, set()

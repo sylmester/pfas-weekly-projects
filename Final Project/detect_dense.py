@@ -35,6 +35,12 @@ MIN_AREA_PX = 1500     # blobs smaller than this (full-size pixels) are noise
 OPEN_KERNEL = 5        # removes small specks
 CLOSE_KERNEL = 25      # joins the robot's parts into one blob
 
+# Farneback reports spurious flow on dark, textureless areas near the image border
+# (e.g. the bottom-right floor corner in 2_obstacle) although the pixels barely change.
+# A blob only counts if the mean grey-level change between the two frames inside it is
+# above this. Measured on 2_obstacle: false blobs <= 1.3, real robot >= 4.1.
+MIN_INTENSITY_DIFF = 2.5
+
 FARNEBACK_PARAMS = dict(
     pyr_scale=0.5, levels=3, winsize=15, iterations=3, poly_n=5, poly_sigma=1.2, flags=0
 )
@@ -64,10 +70,24 @@ def motion_mask(gray1, gray2):
     return mask, mag
 
 
-def detect(mask):
-    """Bounding box (x, y, w, h) of the largest moving blob, or None."""
+def intensity_change(contour, diff):
+    """Mean absolute grey-level difference between the two frames inside the blob."""
+    blob = np.zeros(diff.shape, np.uint8)
+    cv2.drawContours(blob, [contour], -1, 255, -1)
+    return float(diff[blob > 0].mean())
+
+
+def detect(mask, diff):
+    """Bounding box (x, y, w, h) of the largest real moving blob, or None.
+
+    diff: full-size absolute difference of the two grey frames, used to reject
+    blobs where the flow says "moving" but the pixels did not actually change.
+    """
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = [c for c in contours if cv2.contourArea(c) >= MIN_AREA_PX]
+    contours = [
+        c for c in contours
+        if cv2.contourArea(c) >= MIN_AREA_PX and intensity_change(c, diff) >= MIN_INTENSITY_DIFF
+    ]
     if not contours:
         return None
     return cv2.boundingRect(max(contours, key=cv2.contourArea))
@@ -93,7 +113,9 @@ paths = sorted(glob.glob(LEFT_GLOB))
 if len(paths) < 2:
     raise SystemExit(f"need at least 2 images in {LEFT_GLOB} (run rectify.py first)")
 
-prev_gray = prep(cv2.imread(paths[0]))
+prev_img = cv2.imread(paths[0])
+prev_gray = prep(prev_img)
+prev_full = cv2.cvtColor(prev_img, cv2.COLOR_BGR2GRAY)
 boxes = []
 
 for i, path in enumerate(paths[1:], start=1):
@@ -102,10 +124,11 @@ for i, path in enumerate(paths[1:], start=1):
         print(f"  failed to read {path}, skipping")
         continue
     gray = prep(img)
+    full = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     mask, mag = motion_mask(prev_gray, gray)
     mask = mask[: img.shape[0], : img.shape[1]]
-    box = detect(mask)
+    box = detect(mask, cv2.absdiff(full, prev_full))
     boxes.append((i, *box) if box is not None else (i, -1, -1, -1, -1))
 
     name = os.path.basename(path)
@@ -113,6 +136,7 @@ for i, path in enumerate(paths[1:], start=1):
     print(f"  {name}: {int((mask > 0).sum())} moving px, box={box}")
 
     prev_gray = gray
+    prev_full = full
 
 boxes = np.array(boxes, dtype=np.int32)
 np.save(os.path.join(OUTPUT_DIR, "boxes.npy"), boxes)

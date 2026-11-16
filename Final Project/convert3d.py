@@ -6,21 +6,15 @@ import cv2
 import numpy as np
 import open3d as o3d
 
+from config import DEPTH_GLOB, LEFT_GLOB, CALIB_FILE
+
 # ----------------------------------------------------------------------------
 # CONFIGURATION
 # ----------------------------------------------------------------------------
-DIR = "1_no_obstacle"  # or 0_calib, 1_no_obstacle, 2_obstacle, 3_curved_bend
-
-LEFT_GLOB = f"{DIR}/depth/*.npy"
-RIGHT_GLOB = f"{DIR}/depth/*.npy"
-RGB_GLOB = f"{DIR}/rectified_left/*.png"
-
-CALIB_FILE = "calibration.npz"
-
 IMAGE_NUMBER = 105
 DEPTH_SCALE = 1000.0     # depth in mm -> metres
 DEPTH_MIN = 0.5          # metres, clip anything closer than this
-DEPTH_MAX = 20.0         # metres, clip anything farther (kills sentinel spikes)
+DEPTH_MAX = 25.0         # metres, clip anything farther (kills sentinel spikes)
 STRIDE = 4               # subsample for faster visualization
 
 
@@ -49,7 +43,7 @@ def load_rectified_intrinsics(calib_file=CALIB_FILE):
 def find_matching_rgb(depth_path):
     """Find the RGB image with the same stem as the depth file."""
     stem = os.path.splitext(os.path.basename(depth_path))[0]
-    candidates = sorted(glob.glob(RGB_GLOB))
+    candidates = sorted(glob.glob(LEFT_GLOB))
     for cand in candidates:
         if os.path.splitext(os.path.basename(cand))[0] == stem:
             return cand
@@ -111,22 +105,21 @@ def draw_pointcloud(pcd, color=None):
 # ----------------------------------------------------------------------------
 if __name__ == "__main__":
     # 1. Find depth images
-    left_files = sorted(glob.glob(LEFT_GLOB))
-    right_files = sorted(glob.glob(RIGHT_GLOB))
-    if not left_files:
-        raise FileNotFoundError(f"No depth files found for glob: {LEFT_GLOB}")
-    print(f"Found {len(left_files)} depth files. Using first: {left_files[IMAGE_NUMBER]}")
+    depth_files = sorted(glob.glob(DEPTH_GLOB))
+    if not depth_files:
+        raise FileNotFoundError(f"No depth files found for glob: {DEPTH_GLOB}")
+    print(f"Found {len(depth_files)} depth files. Using first: {depth_files[IMAGE_NUMBER]}")
 
     # 2. Load rectified intrinsics (P1) + first depth image
     K, P1 = load_rectified_intrinsics()
     print("Rectified intrinsics from P1:\n", K)
 
-    depth = np.load(left_files[IMAGE_NUMBER])
+    depth = np.load(depth_files[IMAGE_NUMBER])
     print("Depth shape:", depth.shape,
           "min:", depth.min(), "max:", depth.max())
 
     # 3. RGB image for per-point colors
-    rgb_path = find_matching_rgb(left_files[IMAGE_NUMBER])
+    rgb_path = find_matching_rgb(depth_files[IMAGE_NUMBER])
     rgb = None
     if rgb_path is not None:
         rgb = cv2.imread(rgb_path)

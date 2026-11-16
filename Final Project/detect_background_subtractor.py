@@ -5,17 +5,13 @@ import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from config import DIR, LEFT_GLOB
 
 # ----------------------------------------------------------------------------
 # CONFIGURATION
 # ----------------------------------------------------------------------------
-DIR = "2_obstacle"  # or 0_calib, 1_no_obstacle, 2_obstacle, 3_curved_bend
 OUTPUT_DIR = f"{DIR}/subtract_background/"
-RGB_GLOB = f"{DIR}/rectified_left/*.png"
-
-TEMPLATE_PATH = "husky_template.png"
-
-image_paths = sorted(glob.glob(RGB_GLOB))
+image_paths = sorted(glob.glob(LEFT_GLOB))
 
 MIN_AREA = 250    # ignore small blobs (noise, shadows)
 MAX_AREA = 50000  # ignore huge blobs (lighting changes)
@@ -68,27 +64,27 @@ def draw_detection(frame, det):
 # ----------------------------------------------------------------------------
 # MAIN LOOP
 # ----------------------------------------------------------------------------
+if __name__ == "__main__":
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for path in image_paths:
+        frame = cv2.imread(path)
+        if frame is None:
+            continue
 
-for path in image_paths:
-    frame = cv2.imread(path)
-    if frame is None:
-        continue
+        det = detect_husky(frame)
+        if det:
+            frame = draw_detection(frame, det)
 
-    det = detect_husky(frame)
-    if det:
-        frame = draw_detection(frame, det)
+        cv2.imshow("detection", frame)
 
-    cv2.imshow("detection", frame)
+        name = os.path.basename(path)
+        cv2.imwrite(os.path.join(OUTPUT_DIR, name), frame)
 
-    name = os.path.basename(path)
-    cv2.imwrite(os.path.join(OUTPUT_DIR, name), frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cv2.destroyAllWindows()
+    cv2.destroyAllWindows()
 
 
 
@@ -103,35 +99,35 @@ cv2.destroyAllWindows()
 # ----------------------------------------------------------------------------
 # The simlple background subtract function worked as well and even better than more complicated attempts
 
-def detect_husky(frame, morphology=True):
-    global frame_idx
-    lr = -1 if frame_idx < 75 else 0.002
-    frame_idx += 1
-    mask = backsub.apply(frame, learningRate=lr)
+# def detect_husky(frame, morphology=True):
+#     global frame_idx
+#     lr = -1 if frame_idx < 75 else 0.002
+#     frame_idx += 1
+#     mask = backsub.apply(frame, learningRate=lr)
 
-    if morphology:
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+#     if morphology:
+#         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+#         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+#         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
-                                   cv2.CHAIN_APPROX_SIMPLE)
-    boxes = [cv2.boundingRect(c) for c in contours]
-    keep = [(c, b) for c, b in zip(contours, boxes)
-            if cv2.contourArea(c) > 30 and b[2] < MAX_WIDTH and b[3] < MAX_HEIGHT]
-    if not keep:
-        return None
+#     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
+#                                    cv2.CHAIN_APPROX_SIMPLE)
+#     boxes = [cv2.boundingRect(c) for c in contours]
+#     keep = [(c, b) for c, b in zip(contours, boxes)
+#             if cv2.contourArea(c) > 30 and b[2] < MAX_WIDTH and b[3] < MAX_HEIGHT]
+#     if not keep:
+#         return None
 
-    keep.sort(key=lambda cb: cv2.contourArea(cb[0]), reverse=True)
-    x0, y0, w0, h0 = keep[0][1]
-    c0 = np.array([x0 + w0 / 2, y0 + h0 / 2])
+#     keep.sort(key=lambda cb: cv2.contourArea(cb[0]), reverse=True)
+#     x0, y0, w0, h0 = keep[0][1]
+#     c0 = np.array([x0 + w0 / 2, y0 + h0 / 2])
 
-    R = 80
-    keep = [(c, b) for c, b in keep
-            if np.linalg.norm(np.array([b[0] + b[2] / 2, b[1] + b[3] / 2]) - c0) < R]
+#     R = 80
+#     keep = [(c, b) for c, b in keep
+#             if np.linalg.norm(np.array([b[0] + b[2] / 2, b[1] + b[3] / 2]) - c0) < R]
 
-    x, y, w, h = cv2.boundingRect(np.vstack([c for c, _ in keep]))
-    area = w * h
-    if area < MIN_AREA or area > MAX_AREA:
-        return None
-    return x, y, w, h, area, mask
+#     x, y, w, h = cv2.boundingRect(np.vstack([c for c, _ in keep]))
+#     area = w * h
+#     if area < MIN_AREA or area > MAX_AREA:
+#         return None
+#     return x, y, w, h, area, mask

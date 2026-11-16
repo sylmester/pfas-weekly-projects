@@ -4,18 +4,14 @@ import os
 import cv2
 import numpy as np
 
+
+
 # ----------------------------------------------------------------------------
 # CONFIGURATION
 # ----------------------------------------------------------------------------
-DIR = "1_no_obstacle"  # or 0_calib, 1_no_obstacle, 2_obstacle, 3_curved_bend
 
-LEFT_GLOB = f"{DIR}/rectified_left/*.png"
-RIGHT_GLOB = f"{DIR}/rectified_right/*.png"
+from config import LEFT_GLOB, RIGHT_GLOB, CALIB_FILE, DEPTH_DIR, DISP_DIR
 
-DISP_DIR = f"{DIR}/disparity/"
-DEPTH_DIR = f"{DIR}/depth/"
-
-CALIB_FILE = "calibration.npz"
 
 # ----------------------------------------------------------------------------
 # DISPARITY

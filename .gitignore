@@ -10,3 +10,5 @@ Final Project/calib_debug
 Final Project/old_code
 
 .vscode
+
+*.pyc

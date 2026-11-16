@@ -12,7 +12,7 @@
 # 
 # Output per sequence: `{seq}/detections.csv` (input of the tracking step), `{seq}/detection/*.jpg` (annotated frames for the video) and `{seq}/background.png`.
 # 
-# Requires `rectify.ipynb` and `disparityMap.ipynb` to have been run first.
+# Requires `rectify.py` and `disparity_map.py` to have been run first (same calibration.npz).
 
 # %%
 import glob
@@ -191,69 +191,67 @@ def run_sequence(seq, cam, save_images=True):
                fmt=["%d", "%d", "%d"] + ["%.4f"] * 10)
     return rows
 
-# %% [markdown]
-# ## 1. Test on a single frame
-# Change `SEQ` / `FRAME` to inspect any frame: background, mask and final detection.
+def inspect_frame(seq, frame_idx, cam):
+    """Debug view of one frame: background, mask, disparity and final detection.
+    Usage (e.g. from a Python console): inspect_frame("2_obstacle", 120, load_camera())"""
+    paths = sorted(glob.glob(f"{seq}/rectified_left/*.png"))
+    background = build_background(paths)
+    frame = cv2.imread(paths[frame_idx])
+    disparity = np.load(f"{seq}/disparity/{frame_idx:06d}.npy")
+    det, mask, candidates = detect_frame(frame, disparity, background, cam)
 
-# %%
-SEQ = "2_obstacle"
-FRAME = 120
+    for c in candidates:
+        size = tuple(round(s, 2) for s in c.get("size_m", ()))
+        z = None if c["pos"] is None else round(c["pos"]["Z"], 2)
+        print(f"blob bbox={c['bbox']} area={c['area']} Z={z} m size={size} m valid={c['valid']} partial={c['partial']}")
 
-cam = load_camera()
-print("camera:", {k: round(v, 3) for k, v in cam.items()})
-
-paths = sorted(glob.glob(f"{SEQ}/rectified_left/*.png"))
-background = build_background(paths)
-frame = cv2.imread(paths[FRAME])
-disparity = np.load(f"{SEQ}/disparity/{FRAME:06d}.npy")
-det, mask, candidates = detect_frame(frame, disparity, background, cam)
-
-for c in candidates:
-    size = tuple(round(s, 2) for s in c.get("size_m", ()))
-    z = None if c["pos"] is None else round(c["pos"]["Z"], 2)
-    print(f"blob bbox={c['bbox']} area={c['area']} Z={z} m size={size} m valid={c['valid']} partial={c['partial']}")
-
-fig, ax = plt.subplots(2, 2, figsize=(16, 9))
-ax[0, 0].imshow(background[..., ::-1]); ax[0, 0].set_title("background (median)")
-ax[0, 1].imshow(mask, cmap="gray"); ax[0, 1].set_title("foreground mask")
-ax[1, 0].imshow(np.clip(disparity, 0, 60), cmap="jet"); ax[1, 0].set_title("disparity")
-ax[1, 1].imshow(draw_detection(frame, det, candidates)[..., ::-1]); ax[1, 1].set_title("detection")
-for a in ax.ravel():
-    a.axis("off")
-plt.tight_layout()
-plt.show()
-
-# %% [markdown]
-# ## 2. Run all sequences
-# Saves the CSV and the annotated images (a few minutes for the four sequences).
-
-# %%
-results = {}
-for seq in SEQUENCES:
-    rows = run_sequence(seq, cam, save_images=True)
-    results[seq] = rows
-    det = rows[:, 1] == 1
-    print(f"{seq}: detected in {det.sum()}/{len(rows)} frames ({int(rows[det, 2].sum())} partial) | "
-          f"Z {np.nanmin(rows[:, 12]):.2f} - {np.nanmax(rows[:, 12]):.2f} m")
-
-# %% [markdown]
-# ## 3. Detected positions
-# Left: X and Z over time (gaps = no detection, e.g. the occlusion in sequence 2). Right: top view (X–Z) of the raw detections, before any tracking/filtering.
-
-# %%
-fig, ax = plt.subplots(len(SEQUENCES), 2, figsize=(14, 4 * len(SEQUENCES)))
-for k, seq in enumerate(SEQUENCES):
-    r = results[seq]
-    full, part = (r[:, 1] == 1) & (r[:, 2] == 0), r[:, 2] == 1
-    ax[k, 0].plot(r[:, 0], r[:, 10], ".", ms=3, label="X")
-    ax[k, 0].plot(r[:, 0], r[:, 12], ".", ms=3, label="Z")
-    ax[k, 0].set_title(seq); ax[k, 0].set_xlabel("frame"); ax[k, 0].set_ylabel("m"); ax[k, 0].legend()
-    ax[k, 1].plot(r[full, 10], r[full, 12], ".", ms=3, label="full")
-    ax[k, 1].plot(r[part, 10], r[part, 12], ".", ms=3, color="orange", label="partial")
-    ax[k, 1].plot(0, 0, "k^", ms=10, label="camera")
-    ax[k, 1].set_xlabel("X [m]"); ax[k, 1].set_ylabel("Z [m]"); ax[k, 1].set_aspect("equal", "datalim")
-    ax[k, 1].legend()
-plt.tight_layout()
-plt.show()
+    fig, ax = plt.subplots(2, 2, figsize=(16, 9))
+    ax[0, 0].imshow(background[..., ::-1]); ax[0, 0].set_title("background (median)")
+    ax[0, 1].imshow(mask, cmap="gray"); ax[0, 1].set_title("foreground mask")
+    ax[1, 0].imshow(np.clip(disparity, 0, 60), cmap="jet"); ax[1, 0].set_title("disparity")
+    ax[1, 1].imshow(draw_detection(frame, det, candidates)[..., ::-1]); ax[1, 1].set_title("detection")
+    for a in ax.ravel():
+        a.axis("off")
+    plt.tight_layout()
+    plt.show()
 
 
+def plot_detections(results):
+    """Left: X and Z over time (gaps = no detection, e.g. the occlusion in sequence 2).
+    Right: top view (X-Z) of the raw detections, before any tracking/filtering."""
+    fig, ax = plt.subplots(len(results), 2, figsize=(14, 4 * len(results)), squeeze=False)
+    for k, (seq, r) in enumerate(results.items()):
+        full, part = (r[:, 1] == 1) & (r[:, 2] == 0), r[:, 2] == 1
+        ax[k, 0].plot(r[:, 0], r[:, 10], ".", ms=3, label="X")
+        ax[k, 0].plot(r[:, 0], r[:, 12], ".", ms=3, label="Z")
+        ax[k, 0].set_title(seq); ax[k, 0].set_xlabel("frame"); ax[k, 0].set_ylabel("m"); ax[k, 0].legend()
+        ax[k, 1].plot(r[full, 10], r[full, 12], ".", ms=3, label="full")
+        ax[k, 1].plot(r[part, 10], r[part, 12], ".", ms=3, color="orange", label="partial")
+        ax[k, 1].plot(0, 0, "k^", ms=10, label="camera")
+        ax[k, 1].set_xlabel("X [m]"); ax[k, 1].set_ylabel("Z [m]"); ax[k, 1].set_aspect("equal", "datalim")
+        ax[k, 1].legend()
+    plt.tight_layout()
+    plt.show()
+
+
+# ----------------------------------------------------------------------------
+# MAIN
+# Runs only with `python detect_median.py`, not when another script does
+# `from detect_median import ...`.
+# ----------------------------------------------------------------------------
+if __name__ == "__main__":
+    # Work from this script's folder, so it also runs with the VS Code "Run" button
+    # (the sequence folders and calibration.npz are found relative to it).
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    cam = load_camera()
+    print("camera:", {k: round(v, 3) for k, v in cam.items()})
+
+    results = {}
+    for seq in SEQUENCES:
+        rows = run_sequence(seq, cam, save_images=True)
+        results[seq] = rows
+        det = rows[:, 1] == 1
+        print(f"{seq}: detected in {det.sum()}/{len(rows)} frames ({int(rows[det, 2].sum())} partial) | "
+              f"Z {np.nanmin(rows[:, 12]):.2f} - {np.nanmax(rows[:, 12]):.2f} m")
+
+    plot_detections(results)

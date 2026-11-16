@@ -7,7 +7,10 @@ import numpy as np
 # ----------------------------------------------------------------------------
 # CONFIGURATION
 # ----------------------------------------------------------------------------
-DIR = "1_no_obstacle"  # or 0_calib, 1_no_obstacle, 2_obstacle, 3_curved_bend
+# Sequence to process: given on the command line (python rectify.py 2_obstacle),
+# otherwise the default below. or 0_calib, 1_no_obstacle, 2_obstacle, 3_curved_bend
+import sys
+DIR = sys.argv[1] if len(sys.argv) > 1 else "1_no_obstacle"
 
 LEFT_GLOB = f"{DIR}/left/*.png"
 RIGHT_GLOB = f"{DIR}/right/*.png"

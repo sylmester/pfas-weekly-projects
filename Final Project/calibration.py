@@ -107,7 +107,7 @@ def refine(gray, corners):
     dy = np.linalg.norm(np.diff(grid, axis=0), axis=2) # --vertical--
     square_px = min(np.median(dx), np.median(dy)) # Take the smallest distance.
 
-    half_win = int(np.clip(0.45 * square_px, 2, 11))
+    half_win = int(0.45 * square_px)
     refined = cv2.cornerSubPix(gray, corners, (half_win, half_win), (-1, -1), SUBPIX_CRITERIA)
     return refined.reshape(-1, 2)  
 

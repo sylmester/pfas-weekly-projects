@@ -34,7 +34,6 @@ INTRINSIC_FLAGS = cv2.CALIB_FIX_K3 | cv2.CALIB_ZERO_TANGENT_DIST
 # Image scales tried by the corner detector. See find_corners().
 SCALES = (1.0, 0.5, 0.25, 1.25, 1.5, 2.0, 2.5)
 
-MAX_VIEW_ERROR_PX = 1.5       # a view reprojecting worse than this is dropped and the camera recalibrated
 ALPHA = 0                     # final rectification: 0 = crop to valid pixels, 1 = keep every pixel
 PREVIEW_PAIRS = 5             # how many pairs to render in the stage previews
 OUTPUT_FILE = "calibration.npz"
@@ -209,37 +208,11 @@ def detect_all():
 # ----------------------------------------------------------------------------
 # STEP 2: SINGLE-CAMERA CALIBRATION
 # ----------------------------------------------------------------------------
-def view_errors(imgpoints, rvecs, tvecs, K, D):
-    """RMS reprojection error (px) of each view."""
-    errors = []
-    for pts, rvec, tvec in zip(imgpoints, rvecs, tvecs):
-        projected, _ = cv2.projectPoints(OBJP, rvec, tvec, K, D)
-        errors.append(float(np.sqrt(np.mean(np.sum((projected.reshape(-1, 2) - pts.reshape(-1, 2)) ** 2, axis=1)))))
-    return errors
 
-
-def calibrate_camera(side, names, imgpoints, image_size):
-    """Calibrate one camera; views with a very large error (bad detections) are dropped once."""
-    rejected = []
-    for attempt in (1, 2):
-        rms, K, D, rvecs, tvecs = cv2.calibrateCamera(
-            [OBJP] * len(imgpoints), imgpoints, image_size, None, None, flags=INTRINSIC_FLAGS)
-        errors = view_errors(imgpoints, rvecs, tvecs, K, D)
-        limit = max(MAX_VIEW_ERROR_PX, 3 * float(np.median(errors)))  # never drops 'everything'
-        bad = [i for i, e in enumerate(errors) if e > limit]
-        print(f"  [{side}] pass {attempt}: {len(imgpoints)} views, RMS {rms:.3f} px")
-        if attempt == 2 or not bad:
-            break
-        print(f"  [{side}] dropping views with error > {limit:.1f} px: "
-              + ", ".join(f"{names[i]} ({errors[i]:.1f} px)" for i in bad))
-        rejected += [names[i] for i in bad]
-        imgpoints = [p for i, p in enumerate(imgpoints) if i not in bad]
-        names = [n for i, n in enumerate(names) if i not in bad]
-
-    print(f"  [{side}] fx, fy = {K[0, 0]:.1f}, {K[1, 1]:.1f} px | cx, cy = {K[0, 2]:.1f}, {K[1, 2]:.1f} px "
-          f"(image centre {image_size[0] / 2:.0f}, {image_size[1] / 2:.0f})")
-    print(f"  [{side}] D (k1, k2, p1, p2, k3) = {np.round(D.ravel(), 4)}")
-    return K, D, rejected
+def calibrate_camera(image_points, image_size):
+    rms, camera_matrix, distortion, _, _ = cv2.calibrateCamera(
+        [OBJP] * len(image_points), image_points, image_size, None, None, flags=INTRINSIC_FLAGS)
+    return camera_matrix, distortion, rms
 
 
 # ----------------------------------------------------------------------------
@@ -358,18 +331,14 @@ def main():
             v["right"] = None
 
     section("2. Per-camera calibration (all boards found by that camera)")
-    K, D, rejected = {}, {}, set()
+    K, D = {}, {}
     for side in ("left", "right"):
-        used = [v for v in views if v[side] is not None]
-        if len(used) < 3:
-            raise RuntimeError(f"Only {len(used)} {side} boards detected - check PATTERN and the "
-                               f"images in {DEBUG_DIR}/detections/")
-        K[side], D[side], bad = calibrate_camera(
-            side, [v["name"] for v in used], [v[side] for v in used], image_size)
-        rejected |= set(bad)
+        used_views = [view for view in views if view[side] is not None]
+        K[side], D[side], rms = calibrate_camera([view[side] for view in used_views], image_size)
+        print(f"  [{side}] {len(used_views)} views, RMS {rms:.3f} px")
 
     section("3. Stereo calibration (pairs found in both cameras, intrinsics fixed)")
-    pairs = [v for v in views if v["left"] is not None and v["right"] is not None and v["name"] not in rejected]
+    pairs = [view for view in views if view["left"] is not None and view["right"] is not None]
     if not pairs:
         raise RuntimeError("No usable image pair")
     R, T, E, F = calibrate_stereo(pairs, K["left"], D["left"], K["right"], D["right"], image_size)

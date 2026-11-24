@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import open3d as o3d
 
-from config import DEPTH_GLOB, LEFT_GLOB, CALIB_FILE
+from config import DEPTH_GLOB, RECTIFIED_LEFT_GLOB, CALIB_FILE
 
 # ----------------------------------------------------------------------------
 # CONFIGURATION
@@ -43,7 +43,7 @@ def load_rectified_intrinsics(calib_file=CALIB_FILE):
 def find_matching_rgb(depth_path):
     """Find the RGB image with the same stem as the depth file."""
     stem = os.path.splitext(os.path.basename(depth_path))[0]
-    candidates = sorted(glob.glob(LEFT_GLOB))
+    candidates = sorted(glob.glob(RECTIFIED_LEFT_GLOB))
     for cand in candidates:
         if os.path.splitext(os.path.basename(cand))[0] == stem:
             return cand

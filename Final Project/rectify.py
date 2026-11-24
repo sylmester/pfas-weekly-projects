@@ -3,19 +3,14 @@ import os
 
 import cv2
 import numpy as np
+from config import DIR, LEFT_GLOB, RIGHT_GLOB, CALIB_FILE
 
 # ----------------------------------------------------------------------------
 # CONFIGURATION
 # ----------------------------------------------------------------------------
-DIR = "1_no_obstacle"  # or 0_calib, 1_no_obstacle, 2_obstacle, 3_curved_bend
-
-LEFT_GLOB = f"{DIR}/left/*.png"
-RIGHT_GLOB = f"{DIR}/right/*.png"
 
 OUTPUT_LEFT_DIR = f"{DIR}/rectified_left/"
 OUTPUT_RIGHT_DIR = f"{DIR}/rectified_right/"
-
-CALIB_FILE = "calibration.npz"
 
 # ----------------------------------------------------------------------------
 # MAIN

@@ -5,13 +5,13 @@ import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from config import DIR, LEFT_GLOB
+from config import DIR, RECTIFIED_LEFT_GLOB
 
 # ----------------------------------------------------------------------------
 # CONFIGURATION
 # ----------------------------------------------------------------------------
 OUTPUT_DIR = f"{DIR}/subtract_background/"
-image_paths = sorted(glob.glob(LEFT_GLOB))
+image_paths = sorted(glob.glob(RECTIFIED_LEFT_GLOB))
 
 MIN_AREA = 250    # ignore small blobs (noise, shadows)
 MAX_AREA = 50000  # ignore huge blobs (lighting changes)

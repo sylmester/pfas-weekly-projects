@@ -10,7 +10,7 @@ import numpy as np
 # CONFIGURATION
 # ----------------------------------------------------------------------------
 
-from config import LEFT_GLOB, RIGHT_GLOB, CALIB_FILE, DEPTH_DIR, DISP_DIR
+from config import RECTIFIED_LEFT_GLOB, RECTIFIED_RIGHT_GLOB, CALIB_FILE, DEPTH_DIR, DISP_DIR
 
 
 # ----------------------------------------------------------------------------
@@ -51,8 +51,8 @@ calibration = np.load(CALIB_FILE)
 baseline = float(np.linalg.norm(calibration["T"].ravel()))
 focal = float(calibration["P1"][0, 0])
 
-left_paths = sorted(glob.glob(LEFT_GLOB))
-right_paths = sorted(glob.glob(RIGHT_GLOB))
+left_paths = sorted(glob.glob(RECTIFIED_LEFT_GLOB))
+right_paths = sorted(glob.glob(RECTIFIED_RIGHT_GLOB))
 
 if len(left_paths) != len(right_paths):
     raise ValueError(
